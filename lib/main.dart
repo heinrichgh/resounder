@@ -8,34 +8,207 @@ import 'package:flutter_sound/flutter_sound.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 
-void main() => runApp(MyApp());
+import 'package:path/path.dart';
+import 'package:sqflite/sqflite.dart';
+
+const String _databasePath = 'resounder.db';
+
+class Sound {
+  final int id;
+  final String name;
+
+  Sound({this.id, this.name});
+
+  Map<String, dynamic> toMap() {
+    return {'id': id, 'name': name};
+  }
+
+  Sound.fromMap(Map<String, dynamic> map)
+      : id = map['id'],
+        name = map['name'];
+}
+
+class SoundProvider {
+  static Database _database;
+
+  static Future<Database> open(_databasePath) async {
+    if (_database != null) return _database;
+
+    _database = await openDatabase(_databasePath, version: 1,
+        onCreate: (db, version) async {
+      await db
+          .execute("CREATE TABLE sounds(id INTEGER PRIMARY KEY, name TEXT)");
+    });
+    return _database;
+  }
+
+  static _checkOpen() {
+    if (_database == null || !_database.isOpen) {
+      throw Exception(
+          "Open should be called before using any of the provider functions");
+    }
+  }
+
+  static Future<Sound> insert(Sound sound) async {
+    _checkOpen();
+    int id = await _database.insert('sounds', sound.toMap());
+    return Sound(id: id, name: sound.name);
+  }
+
+  static Future<List<Sound>> queryAll() async {
+    _checkOpen();
+    var soundRecords = await _database.query('sounds');
+    return soundRecords.map((record) => Sound.fromMap(record)).toList();
+  }
+
+  static Future close() async {
+    _database.close();
+    _database = null;
+  }
+}
+
+void main() {
+  runApp(MyApp());
+}
 
 class MyApp extends StatelessWidget {
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-        title: 'Flutter Demo',
+        title: 'Resounder',
         theme: ThemeData(
-          // This is the theme of your application.
-          //
-          // Try running your application with "flutter run". You'll see the
-          // application has a blue toolbar. Then, without quitting the app, try
-          // changing the primarySwatch below to Colors.green and then invoke
-          // "hot reload" (press "r" in the console where you ran "flutter run",
-          // or simply save your changes to "hot reload" in a Flutter IDE).
-          // Notice that the counter didn't reset back to zero; the application
-          // is not restarted.
           primarySwatch: Colors.blue,
         ),
         home: Scaffold(
-            appBar: AppBar(
-              title: Text("Resounder"),
-            ),
-            body: Container(
-              padding: EdgeInsets.only(top: 12),
-              child: Player(),
-            )));
+          appBar: AppBar(
+            title: Text("Resounder"),
+          ),
+          body: Container(
+            padding: EdgeInsets.only(top: 12),
+            child: SoundList(),
+          ),
+          floatingActionButton: Builder(
+              builder: (context) => FloatingActionButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => NewSoundRoute()),
+                      );
+                    },
+                    child: Icon(Icons.add),
+                    backgroundColor: Colors.green,
+                  )),
+        ));
+  }
+}
+
+class SoundList extends StatefulWidget {
+  @override
+  _SoundListState createState() => _SoundListState();
+}
+
+class _SoundListState extends State<SoundList> {
+  List<Sound> soundList = <Sound>[];
+  final _biggerFont = const TextStyle(fontSize: 18.0);
+
+  _refreshList() async {
+    SoundProvider.open(_databasePath);
+    var newSoundList = await SoundProvider.queryAll();
+    debugPrint('Query Called: ${newSoundList.length}');
+
+    setState(() {
+      soundList = newSoundList;
+    });
+  }
+
+  Widget _buildSoundList() {
+    return ListView.builder(
+        padding: const EdgeInsets.all(16.0),
+        itemCount: soundList.length,
+        itemBuilder: (context, i) {
+          return _buildSoundRow(soundList[i]);
+        });
+  }
+
+  Widget _buildSoundRow(Sound sound) {
+    return
+      Column(children: <Widget>[
+        ListTile(
+          title: Text(
+            sound.name,
+            style: _biggerFont,
+          ),
+          trailing: Text(
+            '${sound.id}',
+            style: _biggerFont,
+          ),
+        ),
+        Divider()
+      ],
+      );
+
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      child: Column(
+        children: <Widget>[
+          RaisedButton(
+            child: Text("Refresh List"),
+            onPressed: _refreshList,
+          ),
+          Expanded(
+            child: _buildSoundList(),
+          )
+        ],
+      ),
+    );
+  }
+}
+
+class NewSoundRoute extends StatelessWidget {
+  final _formKey = GlobalKey<FormState>();
+  Sound _sound;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+        appBar: AppBar(
+          title: Text('New Sound'),
+        ),
+        body: Column(children: <Widget>[
+          Form(
+              key: _formKey,
+              child: TextFormField(
+                validator: (value) {
+                  if (value.isEmpty) {
+                    return 'Please specify a name';
+                  }
+                  _sound = Sound(name: value);
+                  return null;
+                },
+              )),
+          Builder(
+            builder: (context) {
+              return RaisedButton(
+                onPressed: () async {
+                  if (_formKey.currentState.validate()) {
+                    await SoundProvider.open(_databasePath);
+                    _sound = await SoundProvider.insert(_sound);
+
+                    Scaffold
+                        .of(context)
+                        .showSnackBar(SnackBar(content: Text('Sound Saved')));
+                  }
+                },
+                child: Text("Save"),
+              );
+            },
+          )
+        ]));
   }
 }
 

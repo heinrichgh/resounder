@@ -26,6 +26,8 @@ dependencies:
   flutter_sound: ^1.7.0
   intl: ^0.16.0
   path_provider: ^1.5.1
+  sqflite: ^1.2.0
+  path: ^1.6.4
 
 dev_dependencies:
   flutter_test:

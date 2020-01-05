@@ -2,6 +2,8 @@
 
 Record, catalogue and replay sounds&#x2F;audio.
 
+This is a work in progress. Expect major code refactoring.
+
 ## Getting Started
 
 This project is a starting point for a Flutter application.
